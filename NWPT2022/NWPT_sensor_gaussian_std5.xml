@@ -1,0 +1,841 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.5//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_5.dtd'>
+<nta>
+	<declaration>// Global time. One time unit in Uppaal represents 1 minute
+const int m = 1; // 1 minute = 1 time unit
+const int h = 60*m; // 1 hour = 60 minutes
+clock t; // global time [min]
+
+// Urban catchment
+const double UC_k = 0.25; // Urban surface resevoir reaction factor [cm/min * 1 / cm]
+const double A_UC = 37.0 * 10000.0 * 10000.0; // urban area catchment [cm2], 1 ha = 10000 m2, 1 m2 = 10000 cm2 = [cm/(min*cm)]
+double rain = 0.0; // Rainfall [cm/min]
+clock S_UC = 0.0; // Water surface height urban catchment [cm]
+
+// Rain detention pond
+const int W = 300; // max water height [cm]
+clock w = 100.0; // water level in pond [cm]
+double Qout = 0.0; // pond outflow [cm3/min], will be properly initialized in Controller
+clock o = 0.0; // accumelated overflow time [min]
+
+// Cost function
+clock c = 0.0; // cost function [-]
+
+//.....................
+// Esther 
+//.....................
+
+const int A = 8;
+
+// Sensor for reading pond's water height with uniform distribution 
+double w_ud = 0.0;
+//double w_ud[A];
+//double w_udpo[A];
+
+// Sensor for reading pond's water height with normal distribution 
+double w_gd = 0.0;
+//double w_gd[A];
+//double w_gdpo[A];
+
+// Cost function
+clock c1 = 0.0; // cost function [-]
+clock c2 = 0.0; // cost function [-]
+clock c3 = 0.0; // cost function [-]
+
+// Rain detention pond
+//const int WR = 300 * 0.9; // max water height [cm]</declaration>
+	<template>
+		<name>Rain</name>
+		<declaration>const int I = 6; // number of intervals. Simulation should finish before the last period is over. Therefore, last period is a large dummy period.
+int i = 0; // current interval index
+
+// Exact values =&gt; const int dryL[I] = {233*m, 71*m, 1529*m, 187*m, 226*m, 24*h};
+const int dryL[I] = {210*m, 64*m, 1376*m, 168*m, 203*m, 24*h}; // lower bound duration dry period [min]
+const int dryU[I] = {256*m, 78*m, 1682*m, 206*m, 249*m, 24*h}; // upper bound duration dry period [min]
+
+// Exact values =&gt; const int rainL[I] = {30*m, 23*m, 55*m, 26*m, 231*m, 24*h};
+const int rainL[I] = {27*m, 21*m, 49*m, 23*m, 208*m, 24*h}; // lower bound duration raining period [min]
+const int rainU[I] = {33*m, 25*m, 61*m, 29*m, 254*m, 24*h}; // upper bound duration raining period [min]
+
+const double rainmax[I] = {0.01333, 0.03478, 0.02545, 0.02308, 0.00952, 0.0}; // rain intensity [cm/min], 1 mm/min = 0.1 cm/min
+
+
+clock d = 0.0; // duration of dry or raining period [min]
+const double e = 0.1; // rain uncertainty factor.
+
+// Returns a sample from a uniform distribution between lower and upper.
+double uniform(double lower, double upper)
+{
+    double distance = upper - lower;
+    double sample = random(distance);
+    return lower + sample;
+}</declaration>
+		<location id="id0" x="-85" y="-8">
+			<name x="-136" y="-17">Dry</name>
+			<label kind="invariant" x="-153" y="8">d &lt;= dryU[i]</label>
+		</location>
+		<location id="id1" x="85" y="-8">
+			<name x="102" y="-25">Raining</name>
+			<label kind="invariant" x="93" y="0">d &lt;= rainU[i]</label>
+		</location>
+		<init ref="id0"/>
+		<transition id="id2" controllable="false">
+			<source ref="id1"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-51" y="34">d &gt;= rainL[i]</label>
+			<label kind="assignment" x="-51" y="51">d = 0,
+i++,
+rain = 0.0</label>
+			<nail x="60" y="34"/>
+			<nail x="-59" y="34"/>
+		</transition>
+		<transition id="id3" controllable="false">
+			<source ref="id0"/>
+			<target ref="id1"/>
+			<label kind="guard" x="-51" y="-110">d &gt;= dryL[i]</label>
+			<label kind="assignment" x="-51" y="-93">d = 0,
+rain = rainmax[i]*uniform(1 - e, 1 + e)</label>
+			<nail x="-68" y="-51"/>
+			<nail x="68" y="-51"/>
+		</transition>
+	</template>
+	<template>
+		<name>UrbanCatchment</name>
+		<location id="id4" x="0" y="0">
+			<label kind="invariant" x="-85" y="17">S_UC' == rain - (S_UC * UC_k)</label>
+		</location>
+		<init ref="id4"/>
+	</template>
+	<template>
+		<name>Pond</name>
+		<declaration>// We assume as pond geometry an inverted pyramid with square base, where the base is the surface of the permanent water level. 
+// H represents the height of the pyramid, L represents the area of the pyramid.
+const double H = 1000000.0; // pond geometry H [cm]
+const double L = 7464.5; // pond geometry L [cm], 7464.5 -&gt; 5572 m2 area
+
+// Flow from urban catchment to pond. Eq. 2 in paper.
+double Qin()
+{
+    return S_UC * UC_k * A_UC;
+}
+
+// Dynamics of the water level. Eqs. 4 and 5 in the paper combined.
+double pond_dynamics()
+{
+    if (w &lt;= 0 &amp;&amp; Qin() &lt;= Qout) return 0;
+
+    else if (w &gt;= W &amp;&amp; Qin() &gt;= Qout) return 0; 
+
+    else return H*H/(L*L)/((w+H)*(w+H))*(Qin()-Qout);
+}
+
+// Cummulative overflow duration. Eq. 6 in the paper.
+double overflow()
+{
+    const double epsilon = 0.1; // for numerical precision 
+    if (w &gt;= W - epsilon) return 1.0;
+    
+    else return 0.0;
+}
+
+
+//.........................
+// Noise functions 
+//.........................
+
+const double e = 0.1; // sensor uncertainty factor. 
+
+// noise function - uniform distribution (from Martijn) 
+double uniform(double lower, double upper)
+{
+    double distance = upper - lower; 
+    double sample = random(distance); 
+    return lower + sample; 
+}
+
+</declaration>
+		<location id="id5" x="0" y="0">
+			<label kind="invariant" x="-76" y="17">w' == pond_dynamics() &amp;&amp;
+o' == overflow()</label>
+			<label kind="exponentialrate" x="-25" y="-8">1</label>
+		</location>
+		<init ref="id5"/>
+	</template>
+	<template>
+		<name>Controller</name>
+		<declaration>const int P = h; // control switching period [min]
+const double Qomax = 60.0 * 95000.0; // max outflow [cm3/min], 95000 cm3/s = 95 l/s
+const int C = 3; // number of control modes
+const double Qoutv[C] = {(1.0/6.0)*Qomax, (2.0/3.0)*Qomax, (3.0/3.0)*Qomax}; // outflow modes
+clock x = 0.0; // control switching clock
+
+</declaration>
+		<location id="id6" x="0" y="0">
+			<label kind="invariant" x="-25" y="17">x&lt;=(P+1)</label>
+		</location>
+		<location id="id7" x="-178" y="0">
+			<urgent/>
+		</location>
+		<location id="id8" x="136" y="0">
+			<urgent/>
+		</location>
+		<init ref="id7"/>
+		<transition id="id9">
+			<source ref="id8"/>
+			<target ref="id6"/>
+			<label kind="select" x="17" y="-102">i:int[0,C-1]</label>
+			<label kind="assignment" x="0" y="-85">x=0, Qout=Qoutv[i]</label>
+			<nail x="136" y="-59"/>
+			<nail x="0" y="-59"/>
+		</transition>
+		<transition id="id10" controllable="false">
+			<source ref="id6"/>
+			<target ref="id8"/>
+			<label kind="guard" x="59" y="0">x&gt;=P</label>
+		</transition>
+		<transition id="id11">
+			<source ref="id7"/>
+			<target ref="id6"/>
+			<label kind="select" x="-127" y="-17">i:int[0,C-1]</label>
+			<label kind="assignment" x="-144" y="0">Qout=Qoutv[i]</label>
+		</transition>
+	</template>
+	<template>
+		<name>CostFunction1</name>
+		<declaration>// This cost function from Martijn's ADHS 21 paper. 
+// This cost function considers Partical sedimentation, but no overflow. </declaration>
+		<location id="id12" x="-246" y="-17">
+			<label kind="invariant" x="-365" y="0">c1' == (1-(w/W))</label>
+		</location>
+		<init ref="id12"/>
+	</template>
+	<template>
+		<name>SensorUniform</name>
+		<parameter>const double e</parameter>
+		<declaration>//..............................
+// Esther 
+//..............................
+
+clock x = 0.0; // control switching clock
+
+const int S = 10*m; // sensor reading interval [min] - 10 min applied
+
+
+const int P = 5; // size of sensor reading for partial observation 
+const int I = 6*24*3+500; // size of sensor reading for full observation 
+
+// The value from senser will be put to list. 
+double po_list[P];
+double po=0.0;
+double posum=0.0;
+//double full_list [I];
+
+int [0,P] len; 
+int [0,I] len2; 
+
+
+//........................
+// sensor reading queue
+//........................
+
+// Remove the front element of the po_list. It can hold only 5 elements. 
+void delist(double element)
+{
+    int i = 0; 
+    len -= 1; 
+    while (i&lt;P-1) 
+    {
+        po_list[i] = po_list[i+1];
+        i++;
+    }
+    po_list[i] = element;
+ 
+   
+}
+
+// Put a new element at the end of the list. 
+void enlist(double element)
+{
+    if (len &lt; P)
+    {po_list[len] = element;
+    }
+    else
+    {delist(element);}
+}
+
+// Impelmentation for Full reading sensor  
+/*void fulllist(double element)
+{
+    full_list[len2] = element;
+}*/
+
+
+// average of enlist 
+double avelist()
+{
+   int i = 0; 
+   po = 0.0; 
+   posum = 0.0; 
+   //len -= 1; 
+   if (len2 &lt; P-1){
+    while (i &lt; P-1) {
+        posum = posum + po_list[i];
+        i++;          
+        }po = posum/(len+1);
+    }
+
+    else{    
+        while (i &lt; P) {
+            posum = posum + po_list[i];
+            i++;
+        }
+    po = posum/5;
+    }    
+    return po; 
+}
+
+//.........................
+// Noise functions 
+//.........................
+
+//const double e = 0.1; // sensor uncertainty factor. 
+
+double a = 0.0; // sensor uncertainty factor.
+
+
+// noise function - uniform distribution (from Martijn) 
+double uniform(double lower, double upper)
+{
+    double distance = upper - lower; 
+    double sample = random(distance+0.01); 
+    return lower + sample; 
+}
+
+</declaration>
+		<location id="id13" x="-442" y="-161">
+			<name x="-476" y="-212">SensorOff</name>
+			<urgent/>
+		</location>
+		<location id="id14" x="-229" y="-161">
+			<name x="-255" y="-212">SensorOn</name>
+			<label kind="invariant" x="-263" y="-195">x &lt;= (S+1)</label>
+		</location>
+		<location id="id15" x="-51" y="-161">
+			<name x="-59" y="-212">Detect</name>
+			<committed/>
+		</location>
+		<init ref="id13"/>
+		<transition id="id16" controllable="false">
+			<source ref="id15"/>
+			<target ref="id14"/>
+			<label kind="assignment" x="-212" y="-93">x = 0, 
+w_ud = w + uniform(-e, e)</label>
+			<nail x="-51" y="-93"/>
+			<nail x="-229" y="-93"/>
+		</transition>
+		<transition id="id17" controllable="false">
+			<source ref="id14"/>
+			<target ref="id15"/>
+			<label kind="guard" x="-161" y="-187">x &gt;= S</label>
+		</transition>
+		<transition id="id18" controllable="false">
+			<source ref="id13"/>
+			<target ref="id14"/>
+			<label kind="assignment" x="-357" y="-187">x = 0</label>
+		</transition>
+	</template>
+	<template>
+		<name>SensorGaussian</name>
+		<parameter>const double std</parameter>
+		<declaration>//..............................
+// Esther 
+//..............................
+
+clock x = 0.0; // control switching clock
+
+const int S = 10*m; // sensor reading interval [min] - 10 min applied
+
+
+const int P = 5; // size of sensor reading for partial observation 
+const int I = 6*10*24*3+500; // size of sensor reading for full observation 
+
+// The value from senser will be put to list. 
+double po_list[P];
+double po=0.0;
+double posum=0.0;
+double full_list [I];
+
+int [0,P] len; 
+int [0,I] len2; 
+
+
+//........................
+// sensor reading queue
+//........................
+
+// Remove the front element of the po_list. It can hold only 5 elements. 
+void delist(double element)
+{
+    int i = 0; 
+    len -= 1; 
+    while (i&lt;P-1) 
+    {
+        po_list[i] = po_list[i+1];
+        i++;
+    }
+    po_list[i] = element;
+ 
+   
+}
+
+// Put a new element at the end of the list. 
+void enlist(double element)
+{
+    if (len &lt; P)
+    {po_list[len] = element;
+    }
+    else
+    {delist(element);}
+}
+
+// Impelmentation for Full reading sensor  
+void fulllist(double element)
+{
+    full_list[len2] = element;
+}
+
+
+// average of enlist 
+double avelist()
+{
+   int i = 0; 
+   po = 0.0; 
+   posum = 0.0; 
+   //len -= 1; 
+   if (len2 &lt; P-1){
+    while (i &lt; P-1) {
+        posum = posum + po_list[i];
+        i++;          
+        }po = posum/(len+1);
+    }
+
+    else{    
+        while (i &lt; P) {
+            posum = posum + po_list[i];
+            i++;
+        }
+    po = posum/5;
+    }    
+    return po; 
+}
+
+//.........................
+// Noise functions 
+//.........................
+
+//const double e = 0.1; // sensor uncertainty factor. 
+
+double a = 0.0; // sensor uncertainty factor.
+
+
+// noise function - Gaussian distribution  
+double gau(double std)
+{
+    double sample = random_normal(0, std); 
+    return sample; 
+}
+
+</declaration>
+		<location id="id19" x="-433" y="-161">
+			<name x="-467" y="-212">SensorOff</name>
+			<urgent/>
+		</location>
+		<location id="id20" x="-229" y="-161">
+			<name x="-255" y="-212">SensorOn</name>
+			<label kind="invariant" x="-263" y="-195">x &lt;= (S+1)</label>
+		</location>
+		<location id="id21" x="-51" y="-161">
+			<name x="-59" y="-212">Detect</name>
+			<committed/>
+		</location>
+		<init ref="id19"/>
+		<transition id="id22" controllable="false">
+			<source ref="id21"/>
+			<target ref="id20"/>
+			<label kind="assignment" x="-212" y="-93">x = 0, 
+w_gd = w + gau(std)</label>
+			<nail x="-51" y="-93"/>
+			<nail x="-229" y="-93"/>
+		</transition>
+		<transition id="id23" controllable="false">
+			<source ref="id20"/>
+			<target ref="id21"/>
+			<label kind="guard" x="-161" y="-187">x &gt;= S</label>
+		</transition>
+		<transition id="id24" controllable="false">
+			<source ref="id19"/>
+			<target ref="id20"/>
+			<label kind="assignment" x="-357" y="-187">x = 0</label>
+		</transition>
+	</template>
+	<template>
+		<name>CostFunction2</name>
+		<declaration>// This cost function from Martijn's ADHS 21 paper. 
+// This cost function considers Partical sedimentation, but no overflow. </declaration>
+		<location id="id25" x="-246" y="-17">
+			<label kind="invariant" x="-365" y="0">c2' == 1000*pow(w/W,20) + (1-(w/W))</label>
+		</location>
+		<init ref="id25"/>
+	</template>
+	<template>
+		<name>CostFunction3</name>
+		<declaration>// This cost function from Martijn's ADHS 21 paper. 
+// This cost function considers Partical sedimentation, but no overflow. </declaration>
+		<location id="id26" x="-246" y="-17">
+			<label kind="invariant" x="-365" y="0">c3' == 100*pow(w/W,20) + (1-(w/W))</label>
+		</location>
+		<init ref="id26"/>
+	</template>
+	<system>
+ga = SensorGaussian(5.0); // If you want to change std, change the value. 
+//ga01 = SensorGaussian(5.0, 1);
+//ga02 = SensorGaussian(10.0, 2);
+//ga03 = SensorGaussian(15.0, 3);
+
+uni = SensorUniform(0.0); // If you want to change error range, change the value. 
+//uni01 = SensorGaussian(1.0, 1);
+//uni02 = SensorGaussian(2.0, 2);
+//uni03 = SensorGaussian(3.0, 3);
+
+system Pond, Rain, Controller, UrbanCatchment, CostFunction1, CostFunction2, CostFunction3, ga, uni;
+</system>
+	<queries>
+		<option key="--total-runs" value="100"/>
+		<option key="--discretization" value="0.5"/>
+		<option key="--good-runs" value="100"/>
+		<option key="--eval-runs" value="20"/>
+		<option key="--runs-pr-state" value="100"/>
+		<query>
+			<formula>// Optimal control (w with Gaussian noise; std = 5.0)</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>strategy opt2_gd5 = minE (c2) [&lt;=72*h] {} -&gt; {rain, w_gd}: &lt;&gt; (t==72*h)</formula>
+			<comment>*15000 max runs in approximately 180 minutes.
+*Set in options -&gt; statistical parameters the 'discretization step for hybrid systems' to 0.1 to speed up calculation.
+*Set in options -&gt; learning parameters the first four parameters to 200, 15000, 100, 100 to speed up the calculation.</comment>
+			<result outcome="success" type="quality" timestamp="2022-10-31 14:04:23 +0100">
+				<option key="--total-runs" value="100"/>
+				<option key="--discretization" value="0.5"/>
+				<option key="--good-runs" value="100"/>
+				<option key="--eval-runs" value="20"/>
+				<option key="--runs-pr-state" value="100"/>
+			</result>
+		</query>
+		<query>
+			<formula>simulate [&lt;=72*h;10] {w} under opt2_gd5</formula>
+			<comment>w: water level height 
+This query shows simulation results of water level. </comment>
+		</query>
+		<query>
+			<formula>simulate [&lt;=72*h;10] {c2} under opt2_gd5</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>simulate [&lt;=72*h;10] {Qout} under opt2_gd5</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E[&lt;=72*h; 1000] (max:0) under opt2_gd5</formula>
+			<comment/>
+		</query>
+		<query>
+			<formula>E[&lt;=72*h; 1000] (max:c2) under opt2_gd5</formula>
+			<comment/>
+			<result outcome="success" type="quantity" value="3189.92 ± 37.0716 (95% CI)" timestamp="2022-10-31 14:05:57 +0100">
+				<option key="--total-runs" value="100"/>
+				<option key="--discretization" value="0.5"/>
+				<option key="--good-runs" value="100"/>
+				<option key="--eval-runs" value="20"/>
+				<option key="--runs-pr-state" value="100"/>
+				<details>3189.92 ± 37.0716 (95% CI)</details>
+				<plot title="Probability Density Distribution" xaxis="max: c2" yaxis="probability density">
+					<series title="density" type="b(194.065448)" color="0x0000ff" encoding="csv">2854.703481698355,0.003313315204919829
+3048.768929816672,9.017576374198603E-4
+3242.834377934989,2.885624439743553E-4
+3436.8998260533062,1.6489282512820302E-4
+3630.965274171623,1.5458702355769033E-4
+3825.03072228994,5.152900785256344E-5
+4019.096170408257,5.152900785256344E-5
+4213.161618526574,2.576450392628172E-5
+4407.227066644891,2.576450392628172E-5
+4601.292514763208,3.607030549679441E-5
+4795.357962881525,1.5458702355769034E-5
+4989.4234109998415,1.0305801570512689E-5
+5183.488859118159,1.0305801570512689E-5
+5377.554307236476,3.091740471153807E-5
+5571.619755354794,1.0305801570512689E-5
+5765.68520347311,1.0305801570512689E-5
+5959.7506515914265,1.0305801570512689E-5
+6153.816099709744,0.0
+6347.881547828061,5.152900785256344E-6
+6541.946995946379,5.152900785256344E-6
+6736.012444064695,5.152900785256344E-6
+6930.0778921830115,0.0
+7124.143340301329,0.0
+7318.208788419646,0.0
+7512.274236537963,5.152900785256344E-6
+7706.33968465628,0.0
+7900.4051327745965,0.0
+8094.470580892914,1.5458702355769034E-5
+8288.536029011231,0.0
+8482.601477129549,0.0
+8676.666925247864,0.0
+8870.732373366181,5.152900785256344E-6
+					</series>
+					<series title="average" type="pl" color="0x00dd00" encoding="csv">3189.916164376531,0.0
+3189.916164376531,0.0033133152049198296
+					</series>
+					<comment>Parameters: α=0.05, ε=0.05, bucket width=194.07, bucket count=32
+Runs: 1000 in total, 1000 (100%) displayed, 0 (0%) remaining
+Span of displayed sample: [2854.7, 9064.8]
+Mean estimate of displayed sample: 3189.9 ± 37.072 (95% CI)</comment>
+				</plot>
+				<plot title="Probability Distribution" xaxis="max: c2" yaxis="probability">
+					<series title="probability" type="b(194.065448)" color="0x0000ff" encoding="csv">2854.703481698355,0.643
+3048.768929816672,0.175
+3242.834377934989,0.056
+3436.8998260533062,0.032
+3630.965274171623,0.03
+3825.03072228994,0.01
+4019.096170408257,0.01
+4213.161618526574,0.005
+4407.227066644891,0.005
+4601.292514763208,0.007
+4795.357962881525,0.003
+4989.4234109998415,0.002
+5183.488859118159,0.002
+5377.554307236476,0.006
+5571.619755354794,0.002
+5765.68520347311,0.002
+5959.7506515914265,0.002
+6153.816099709744,0.0
+6347.881547828061,0.001
+6541.946995946379,0.001
+6736.012444064695,0.001
+6930.0778921830115,0.0
+7124.143340301329,0.0
+7318.208788419646,0.0
+7512.274236537963,0.001
+7706.33968465628,0.0
+7900.4051327745965,0.0
+8094.470580892914,0.003
+8288.536029011231,0.0
+8482.601477129549,0.0
+8676.666925247864,0.0
+8870.732373366181,0.001
+					</series>
+					<series title="average" type="pl" color="0x00dd00" encoding="csv">3189.916164376531,0.0
+3189.916164376531,0.643
+					</series>
+					<comment>Parameters: α=0.05, ε=0.05, bucket width=194.07, bucket count=32
+Runs: 1000 in total, 1000 (100%) displayed, 0 (0%) remaining
+Span of displayed sample: [2854.7, 9064.8]
+Mean estimate of displayed sample: 3189.9 ± 37.072 (95% CI)</comment>
+				</plot>
+				<plot title="Cumulative Probability Distribution" xaxis="max: c2" yaxis="probability">
+					<series title="cumulative" type="l" color="0x000000" encoding="csv">2854.703481698355,0.0
+3048.768929816672,0.643
+3242.834377934989,0.818
+3436.8998260533062,0.874
+3630.965274171623,0.906
+3825.03072228994,0.936
+4019.096170408257,0.946
+4213.161618526574,0.956
+4407.227066644891,0.961
+4601.292514763208,0.966
+4795.357962881525,0.973
+4989.4234109998415,0.976
+5183.488859118159,0.978
+5377.554307236476,0.98
+5571.619755354794,0.986
+5765.68520347311,0.988
+5959.7506515914265,0.99
+6153.816099709744,0.992
+6347.881547828061,0.992
+6541.946995946379,0.993
+6736.012444064695,0.994
+6930.0778921830115,0.995
+7124.143340301329,0.995
+7318.208788419646,0.995
+7512.274236537963,0.995
+7706.33968465628,0.996
+7900.4051327745965,0.996
+8094.470580892914,0.996
+8288.536029011231,0.999
+8482.601477129549,0.999
+8676.666925247864,0.999
+8870.732373366181,0.999
+					</series>
+					<series title="average" type="pl" color="0x00dd00" encoding="csv">3189.916164376531,0.0
+3189.916164376531,1.0
+					</series>
+					<comment>Parameters: α=0.05, ε=0.05, bucket width=194.07, bucket count=32
+Runs: 1000 in total, 1000 (100%) displayed, 0 (0%) remaining
+Span of displayed sample: [2854.7, 9064.8]
+Mean estimate of displayed sample: 3189.9 ± 37.072 (95% CI)</comment>
+				</plot>
+				<plot title="Cumulative Probability Confidence Intervals" xaxis="max: c2" yaxis="probability">
+					<series title="upper limit" type="k" color="0x0000dd" encoding="csv">2854.703481698355,0.003682083896865672
+3048.768929816672,0.6727372150985135
+3242.834377934989,0.841450346688562
+3436.8998260533062,0.8939431677375203
+3630.965274171623,0.9233710070726222
+3825.03072228994,0.9503669107081509
+4019.096170408257,0.9591766488743693
+4213.161618526574,0.9678505029891286
+4407.227066644891,0.9721228512046636
+4601.292514763208,0.9763413518924032
+4795.357962881525,0.9821330940747504
+4989.4234109998415,0.9845636167664915
+5183.488859118159,0.9861625858279262
+5377.554307236476,0.9877417320275936
+5571.619755354794,0.9923254984349792
+5765.68520347311,0.9937844744404047
+5959.7506515914265,0.9951944893089507
+6153.816099709744,0.9965400238346707
+6347.881547828061,0.9965400238346707
+6541.946995946379,0.9971811412403795
+6736.012444064695,0.9977950175148487
+6930.0778921830115,0.9983745804824372
+7124.143340301329,0.9983745804824372
+7318.208788419646,0.9983745804824372
+7512.274236537963,0.9983745804824372
+7706.33968465628,0.9989090920122741
+7900.4051327745965,0.9989090920122741
+8094.470580892914,0.9989090920122741
+8288.536029011231,0.9999746825125088
+8482.601477129549,0.9999746825125088
+8676.666925247864,0.9999746825125088
+8870.732373366181,0.9999746825125088
+					</series>
+					<series title="lower limit" type="k" color="0xdd0000" encoding="csv">2854.703481698355,0.0
+3048.768929816672,0.6124179122210397
+3242.834377934989,0.7926611505098348
+3436.8998260533062,0.8518262835289733
+3630.965274171623,0.8861975612810254
+3825.03072228994,0.919004925632949
+4019.096170408257,0.9301259944229326
+4213.161618526574,0.9413795807936691
+4407.227066644891,0.947069064214555
+4601.292514763208,0.9528105613842925
+4795.357962881525,0.9609582531940298
+4989.4234109998415,0.9644993614686408
+5183.488859118159,0.9668803354850122
+5377.554307236476,0.9692799673173909
+5571.619755354794,0.9766218439896855
+5765.68520347311,0.9791323204089636
+5959.7506515914265,0.9816867569448875
+6153.816099709744,0.9842979508239253
+6347.881547828061,0.9842979508239253
+6541.946995946379,0.9856308050210814
+6736.012444064695,0.9869865767290255
+6930.0778921830115,0.9883705294401879
+7124.143340301329,0.9883705294401879
+7318.208788419646,0.9883705294401879
+7512.274236537963,0.9883705294401879
+7706.33968465628,0.9897903353160701
+7900.4051327745965,0.9897903353160701
+8094.470580892914,0.9897903353160701
+8288.536029011231,0.9944410757201734
+8482.601477129549,0.9944410757201734
+8676.666925247864,0.9944410757201734
+8870.732373366181,0.9944410757201734
+					</series>
+					<series title="cumulative" type="l" color="0x000000" encoding="csv">2854.703481698355,0.0
+3048.768929816672,0.643
+3242.834377934989,0.818
+3436.8998260533062,0.874
+3630.965274171623,0.906
+3825.03072228994,0.936
+4019.096170408257,0.946
+4213.161618526574,0.956
+4407.227066644891,0.961
+4601.292514763208,0.966
+4795.357962881525,0.973
+4989.4234109998415,0.976
+5183.488859118159,0.978
+5377.554307236476,0.98
+5571.619755354794,0.986
+5765.68520347311,0.988
+5959.7506515914265,0.99
+6153.816099709744,0.992
+6347.881547828061,0.992
+6541.946995946379,0.993
+6736.012444064695,0.994
+6930.0778921830115,0.995
+7124.143340301329,0.995
+7318.208788419646,0.995
+7512.274236537963,0.995
+7706.33968465628,0.996
+7900.4051327745965,0.996
+8094.470580892914,0.996
+8288.536029011231,0.999
+8482.601477129549,0.999
+8676.666925247864,0.999
+8870.732373366181,0.999
+					</series>
+					<series title="average" type="pl" color="0x00dd00" encoding="csv">3189.916164376531,0.0
+3189.916164376531,1.0
+					</series>
+					<comment>Parameters: α=0.05, ε=0.05, bucket width=194.07, bucket count=32
+Runs: 1000 in total, 1000 (100%) displayed, 0 (0%) remaining
+Span of displayed sample: [2854.7, 9064.8]
+Mean estimate of displayed sample: 3189.9 ± 37.072 (95% CI)</comment>
+				</plot>
+				<plot title="Frequency Histogram" xaxis="max: c2" yaxis="count">
+					<series title="count" type="b(194.065448)" color="0x0000ff" encoding="csv">2854.703481698355,643.0
+3048.768929816672,175.0
+3242.834377934989,56.0
+3436.8998260533062,32.0
+3630.965274171623,30.0
+3825.03072228994,10.0
+4019.096170408257,10.0
+4213.161618526574,5.0
+4407.227066644891,5.0
+4601.292514763208,7.0
+4795.357962881525,3.0
+4989.4234109998415,2.0
+5183.488859118159,2.0
+5377.554307236476,6.0
+5571.619755354794,2.0
+5765.68520347311,2.0
+5959.7506515914265,2.0
+6153.816099709744,0.0
+6347.881547828061,1.0
+6541.946995946379,1.0
+6736.012444064695,1.0
+6930.0778921830115,0.0
+7124.143340301329,0.0
+7318.208788419646,0.0
+7512.274236537963,1.0
+7706.33968465628,0.0
+7900.4051327745965,0.0
+8094.470580892914,3.0
+8288.536029011231,0.0
+8482.601477129549,0.0
+8676.666925247864,0.0
+8870.732373366181,1.0
+					</series>
+					<series title="average" type="pl" color="0x00dd00" encoding="csv">3189.916164376531,0.0
+3189.916164376531,643.0
+					</series>
+					<comment>Parameters: α=0.05, ε=0.05, bucket width=194.07, bucket count=32
+Runs: 1000 in total, 1000 (100%) displayed, 0 (0%) remaining
+Span of displayed sample: [2854.7, 9064.8]
+Mean estimate of displayed sample: 3189.9 ± 37.072 (95% CI)</comment>
+				</plot>
+			</result>
+		</query>
+	</queries>
+</nta>
