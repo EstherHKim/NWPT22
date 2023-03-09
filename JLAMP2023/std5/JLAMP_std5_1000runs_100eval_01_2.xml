@@ -3911,6 +3911,19 @@ Mean estimate of displayed sample: 1.3925e+05 ± 898.05 (95% CI)</comment>
 			</result>
 		</query>
 		<query>
+			<formula>strategy opt = loadStrategy {}-&gt;{rain, sensor_w} ("C:\Users\sj81ko\Desktop\Project\paper_partial observation\JLAMP2\ex5_rainfix\strategy\JLAMP_std5_1000runs_100eval_01_2")</formula>
+			<comment/>
+			<result outcome="success" type="quality" timestamp="2023-03-09 09:22:49 +0100">
+				<option key="--total-runs" value="1000"/>
+				<option key="--discretization" value="0.1"/>
+				<option key="--max-iterations" value="100"/>
+				<option key="--good-runs" value="1000"/>
+				<option key="--eval-runs" value="100"/>
+				<option key="--runs-pr-state" value="1000"/>
+				<option key="--max-imitation" value="10"/>
+			</result>
+		</query>
+		<query>
 			<formula>simulate [&lt;=6*h;10] {w, rain*1000} under opt</formula>
 			<comment/>
 			<result outcome="success" type="quality" timestamp="2023-03-08 16:12:41 +0100">
@@ -28454,7 +28467,7 @@ Mean estimate of displayed sample: 1.3925e+05 ± 898.05 (95% CI)</comment>
 		<query>
 			<formula>simulate [&lt;=6*h;10] {Open} under opt</formula>
 			<comment/>
-			<result outcome="success" type="quality" timestamp="2023-03-08 16:12:43 +0100">
+			<result outcome="success" type="quality" timestamp="2023-03-09 09:22:53 +0100">
 				<option key="--total-runs" value="1000"/>
 				<option key="--discretization" value="0.1"/>
 				<option key="--max-iterations" value="100"/>
@@ -28465,62 +28478,78 @@ Mean estimate of displayed sample: 1.3925e+05 ± 898.05 (95% CI)</comment>
 				<plot title="Simulations (10)" xaxis="time" yaxis="value">
 					<series title="Open" type="l" color="0xff0000" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.068190325813305,0.5714285714285714
-60.068190325813305,1.0
+60.29319760036063,0.5714285714285714
+60.29319760036063,1.0
 360.0,1.0
 					</series>
 					<series title="" type="l" color="0xff0909" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.71540063933344,0.5714285714285714
-60.71540063933344,1.0
+60.402710367020255,0.5714285714285714
+60.402710367020255,1.0
 360.0,1.0
 					</series>
 					<series title="" type="l" color="0xff1212" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.318028415630984,0.5714285714285714
-60.318028415630984,1.0
+60.602546476046946,0.5714285714285714
+60.602546476046946,1.0
 360.0,1.0
 					</series>
 					<series title="" type="l" color="0xff1b1b" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.59431954957386,0.5714285714285714
-60.59431954957386,1.0
+60.22295128488711,0.5714285714285714
+60.22295128488711,1.0
 360.0,1.0
 					</series>
 					<series title="" type="l" color="0xff2424" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.881031015762225,0.5714285714285714
-60.881031015762225,1.0
+60.28310485126634,0.5714285714285714
+60.28310485126634,1.0
 360.0,1.0
 					</series>
 					<series title="" type="l" color="0xff2d2d" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.33136643094802,0.5714285714285714
-60.33136643094802,1.0
+60.16926626768751,0.5714285714285714
+60.16926626768751,1.0
+180.97406967827945,1.0
+180.97406967827945,0.14285714285714285
+241.87111421280883,0.14285714285714285
+241.87111421280883,1.0
 360.0,1.0
 					</series>
 					<series title="" type="l" color="0xff3636" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.31446918941479,0.5714285714285714
-60.31446918941479,1.0
+60.40921945588734,0.5714285714285714
+60.40921945588734,1.0
+242.6450164656271,1.0
+242.6450164656271,0.5714285714285714
+302.90909266973387,0.5714285714285714
+302.90909266973387,1.0
 360.0,1.0
 					</series>
 					<series title="" type="l" color="0xff3e3e" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.71230966151949,0.5714285714285714
-60.71230966151949,1.0
+60.405682468916204,0.5714285714285714
+60.405682468916204,1.0
+181.7673676824284,1.0
+181.7673676824284,0.14285714285714285
+241.7869385436733,0.14285714285714285
+241.7869385436733,1.0
 360.0,1.0
 					</series>
 					<series title="" type="l" color="0xff4747" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.330263619805066,0.5714285714285714
-60.330263619805066,1.0
+60.46585443767753,0.5714285714285714
+60.46585443767753,1.0
 360.0,1.0
 					</series>
 					<series title="" type="l" color="0xff5050" encoding="csv">0.0,0.0
 0.0,0.5714285714285714
-60.71277368085608,0.5714285714285714
-60.71277368085608,1.0
+60.322910234958016,0.5714285714285714
+60.322910234958016,1.0
+181.059426049315,1.0
+181.059426049315,0.14285714285714285
+242.0538814570315,0.14285714285714285
+242.0538814570315,1.0
 360.0,1.0
 					</series>
 					<comment/>
